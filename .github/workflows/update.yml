@@ -1,0 +1,89 @@
+name: Update nokkvi-macos cask
+
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [release-published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-nokkvi-macos-cask
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out tap
+        uses: actions/checkout@v4
+
+      - name: Update cask from latest published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          cask="Casks/nokkvi-macos.rb"
+          repo="snusxd/nokkvi-macos"
+
+          tag="$(gh api "repos/${repo}/releases?per_page=20" \
+            --jq '[.[] | select((.draft | not) and (.prerelease | not) and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-macos\\.[0-9]+$")))] | .[0].tag_name // empty')"
+
+          if [ -z "$tag" ]; then
+            echo "::notice::No matching published release found yet for ${repo}."
+            exit 0
+          fi
+
+          version="${tag#v}"
+          current_version="$(sed -n 's/^  version "\([^"]*\)"$/\1/p' "$cask")"
+
+          if [ "$current_version" = "$version" ] && ! grep -q '"0\{64\}"' "$cask"; then
+            echo "Cask is already up to date (${version})."
+            exit 0
+          fi
+
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+
+          arm_asset="nokkvi-${tag}-aarch64-apple-darwin.zip.sha256"
+          intel_asset="nokkvi-${tag}-x86_64-apple-darwin.zip.sha256"
+
+          gh release download "$tag" \
+            --repo "$repo" \
+            --pattern "$arm_asset" \
+            --pattern "$intel_asset" \
+            --dir "$tmpdir"
+
+          arm_sha="$(awk '{print tolower($1)}' "${tmpdir}/${arm_asset}")"
+          intel_sha="$(awk '{print tolower($1)}' "${tmpdir}/${intel_asset}")"
+
+          if [[ ! "$arm_sha" =~ ^[0-9a-f]{64}$ ]] || [[ ! "$intel_sha" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Invalid sha256 value parsed from release assets (arm=${arm_sha}, intel=${intel_sha})."
+            exit 1
+          fi
+
+          VERSION="$version" ARM_SHA="$arm_sha" INTEL_SHA="$intel_sha" CASK="$cask" ruby -e '
+            path = ENV.fetch("CASK")
+            content = File.read(path)
+            content.sub!(/^(\s*version\s+")[^"]+(")/, "\\1#{ENV.fetch("VERSION")}\\2") || abort("version line not found")
+            content.sub!(/^(\s*sha256\s+arm:\s+")[0-9a-f]{64}(")/i, "\\1#{ENV.fetch("ARM_SHA")}\\2") || abort("arm sha256 line not found")
+            content.sub!(/^(\s*intel:\s+")[0-9a-f]{64}(")/i, "\\1#{ENV.fetch("INTEL_SHA")}\\2") || abort("intel sha256 line not found")
+            File.write(path, content)
+          '
+
+          if git diff --quiet -- "$cask"; then
+            echo "No changes to ${cask}."
+            exit 0
+          fi
+
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$cask"
+          git commit -m "nokkvi-macos ${version}"
+          git push
