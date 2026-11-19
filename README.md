@@ -8,7 +8,9 @@ macOS fork of the native Navidrome music client
 ## Install
 
 ```sh
-brew install --cask snusxd/nokkvi-macos/nokkvi-macos
+brew tap snusxd/nokkvi-macos
+brew trust snusxd/nokkvi-macos   # Homebrew 7+ loads third-party taps only once trusted
+brew install --cask nokkvi-macos
 ```
 
 This cask installs `Nokkvi.app` and links the `nokkvi` CLI binary. It requires
