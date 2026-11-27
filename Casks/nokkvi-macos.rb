@@ -1,9 +1,9 @@
 cask "nokkvi-macos" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "0.31.0-macos.1"
-  sha256 arm:   "7ea1b68943576cfb564c1517ba64b139fe7ce484d679e407b6d4a37a6fa794f8",
-         intel: "8f454890a89c528b57b242d01126434cb117f30886712ef5a2efab514fcbd0ad"
+  version "0.32.1-macos.2"
+  sha256 arm:   "7ca4185490e75cc2267be5229e5b6545ad617a43da5b01793e447d9b04122d2c",
+         intel: "64969b709714086a8b1a8980d6448e79721bd4726aedd6d7c8be2195fcf6985d"
 
   url "https://github.com/snusxd/nokkvi-macos/releases/download/v#{version}/nokkvi-v#{version}-#{arch}-apple-darwin.zip"
   name "Nokkvi"
